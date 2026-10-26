@@ -1,6 +1,6 @@
 /** Versioned schema for the companion's state, source events and recoverable local work. */
 export const FRIEND_APPLICATION_ID = 0x46524e44;
-export const FRIEND_SCHEMA_VERSION = 1;
+export const FRIEND_SCHEMA_VERSION = 2;
 
 export const INITIAL_SCHEMA = `
 CREATE TABLE schema_migrations (
@@ -64,4 +64,53 @@ CREATE TABLE outbox (
 CREATE INDEX outbox_pending ON outbox(status, created_at, operation_id);
 `;
 
-export const FRIEND_MIGRATIONS = [{ version: 1, sql: INITIAL_SCHEMA }] as const;
+export const MEMORY_SCHEMA = `
+CREATE TABLE memory_entries (
+  id TEXT PRIMARY KEY,
+  scope TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision > 0),
+  status TEXT NOT NULL CHECK (status IN ('active', 'stale', 'retracted')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE memory_versions (
+  memory_id TEXT NOT NULL REFERENCES memory_entries(id),
+  revision INTEGER NOT NULL CHECK (revision > 0),
+  request_key TEXT NOT NULL UNIQUE,
+  fingerprint TEXT NOT NULL,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('statement', 'observation', 'reflection', 'inference', 'fiction', 'commitment')),
+  subject TEXT NOT NULL CHECK (subject IN ('owner', 'self', 'other')),
+  status TEXT NOT NULL CHECK (status IN ('active', 'retracted')),
+  document_path TEXT NOT NULL UNIQUE,
+  document_hash TEXT NOT NULL,
+  pending_document TEXT,
+  published INTEGER NOT NULL DEFAULT 0 CHECK (published IN (0, 1)),
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY (memory_id, revision),
+  CHECK ((published = 0 AND pending_document IS NOT NULL) OR (published = 1 AND pending_document IS NULL))
+) STRICT;
+CREATE TABLE memory_evidence (
+  memory_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  source_event_id TEXT NOT NULL REFERENCES source_events(id),
+  PRIMARY KEY (memory_id, revision, source_event_id),
+  FOREIGN KEY (memory_id, revision) REFERENCES memory_versions(memory_id, revision)
+) STRICT;
+CREATE TABLE memory_links (
+  child_id TEXT NOT NULL,
+  child_revision INTEGER NOT NULL,
+  parent_id TEXT NOT NULL,
+  parent_revision INTEGER NOT NULL,
+  PRIMARY KEY (child_id, child_revision, parent_id),
+  FOREIGN KEY (child_id, child_revision) REFERENCES memory_versions(memory_id, revision),
+  FOREIGN KEY (parent_id, parent_revision) REFERENCES memory_versions(memory_id, revision)
+) STRICT;
+CREATE INDEX memory_scope_status ON memory_entries(scope, status, updated_at);
+CREATE VIRTUAL TABLE memory_search USING fts5(memory_id UNINDEXED, title_tokens, body_tokens);
+`;
+
+export const FRIEND_MIGRATIONS = [
+  { version: 1, sql: INITIAL_SCHEMA },
+  { version: 2, sql: MEMORY_SCHEMA },
+] as const;

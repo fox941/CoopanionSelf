@@ -229,6 +229,26 @@ describe('Friend persistent state', () => {
 });
 
 describe('Schema migrations', () => {
+  it('upgrades a version-one character without changing identity, state or source evidence', () => {
+    const directory = root();
+    const file = join(directory, 'friend', 'friend.sqlite');
+    mkdirSync(dirname(file), { recursive: true });
+    sql(file, db => {
+      db.exec('BEGIN IMMEDIATE');
+      applyFriendMigrations(db, { fresh: true, now: '2026-01-01T00:00:00.000Z' }, [FRIEND_MIGRATIONS[0]]);
+      db.prepare('INSERT INTO profile_state VALUES (1, ?, 4, ?, ?, ?)').run('existing-character', '{"learned":true}', '2026-01-01', '2026-01-02');
+      db.prepare('INSERT INTO source_events VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run('existing-source', 'desktop', 'original-message', 'owner_private', '2026-01-01', '2026-01-01', '{"text":"Original evidence"}', 'original-hash');
+      db.exec('COMMIT');
+    }, false);
+    const store = open(directory);
+    expect(store.snapshot()).toMatchObject({ profileId: 'existing-character', revision: 4, state: { learned: true } });
+    expect(store.readSource('existing-source')?.payload).toEqual({ text: 'Original evidence' });
+    expect(sql(file, db => db.prepare('SELECT count(*) AS n FROM memory_entries').get()!.n)).toBe(0);
+    expect(sql(file, db => db.prepare('PRAGMA foreign_key_check').all())).toEqual([]);
+    store.close();
+    expect(open(directory).snapshot().profileId).toBe('existing-character');
+  });
+
   it('applies an appended migration once while preserving identity and state', () => {
     const store = open();
     store.apply(change());

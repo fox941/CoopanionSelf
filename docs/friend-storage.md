@@ -14,6 +14,8 @@ The database has an application ID, strict tables, JSON checks, foreign keys, WA
 
 ## Sources and state
 
+Schema version 2 adds the managed memory index: `memory_entries`, immutable `memory_versions`, source links in `memory_evidence`, derivation links in `memory_links`, and the rebuildable FTS5 `memory_search` index. Version 1 upgrades in place without changing character identity, learned state or source evidence. Memory documents are published separately; this migration creates no memories or personality content.
+
 `recordSource()` stores an envelope with its source, source-local event key, visibility scope, occurrence time, receipt time and JSON payload. The envelope establishes what was received; a statement inside its payload is not certified as true. Reusing a source key with different content, occurrence time or scope fails. Canonical JSON makes object property order irrelevant.
 
 `apply()` accepts an application-owned consumer ID, source envelope, expected state revision, complete next state, brief reason and optional pending operations. Source insertion, state revision, change history, consumer receipt and operations commit together. Failure rolls them all back. Redelivery returns the first receipt and current state without applying the old change again. A different consumer can process the same source. A stale expected revision fails so the caller can merge against a fresh snapshot.
