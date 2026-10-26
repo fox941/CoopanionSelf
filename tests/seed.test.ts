@@ -27,29 +27,30 @@ describe('first-run seed', () => {
       seed(home, language === 'zh' ? 'en' : 'zh');
       expect(read(join(home, DEPLOYMENT, 'config.json'))).toMatchObject({ language, worlds: { 'desktop-pet': { cua: { permission: 'ask-once' } } } });
       expect(read(join(home, 'providers', endpoint, 'config.json'))).toMatchObject({ kind: 'coo', secret: vendor.secret, spec: { model: vendor.model } });
-      expect(readFileSync(join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md'), 'utf8')).toBe(readFileSync(personaFile('coo', language), 'utf8'));
+      expect(readFileSync(join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md'), 'utf8')).toBe('');
+      expect(readFileSync(join(home, DEPLOYMENT, 'workspace', 'SYSTEM.md'), 'utf8')).toBe('');
       expect(readFileSync(join(home, DEPLOYMENT, 'avatar.png')).subarray(1, 4).toString()).toBe('PNG');
     }
   });
 
-  it('replaces a self-description still exactly as 0.1.1 seeded it, CRLF or LF', () => {
+  it('preserves an existing legacy self-description, CRLF or LF', () => {
     for (const eol of ['\n', '\r\n']) {
       const home = mkdtempSync(join(tmpdir(), 'cc-seed-'));
       seed(home, 'zh');
       const constitution = join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md');
       writeFileSync(constitution, SEED_0_1_1.replaceAll('\n', eol));
       seed(home, 'zh');
-      expect(readFileSync(constitution, 'utf8')).toContain('「库...」');
+      expect(readFileSync(constitution, 'utf8')).toBe(SEED_0_1_1.replaceAll('\n', eol));
     }
   });
 
-  it('replaces a self-description still exactly as 0.2.4 shipped it with the current one', () => {
+  it('preserves an existing self-description instead of replacing it with an app template', () => {
     const home = mkdtempSync(join(tmpdir(), 'cc-seed-'));
     seed(home, 'zh');
     const constitution = join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md');
     writeFileSync(constitution, SEED_0_2_4);
     seed(home, 'zh');
-    expect(readFileSync(constitution, 'utf8')).toBe(readFileSync(personaFile('coo', 'zh'), 'utf8'));
+    expect(readFileSync(constitution, 'utf8')).toBe(SEED_0_2_4);
   });
 
   it('ships every persona in every app language, each told apart from the others', () => {
@@ -60,26 +61,25 @@ describe('first-run seed', () => {
     }
   });
 
-  it('seeds the self-description in the app language and swaps it for the same persona on a language change only while it is unedited', () => {
+  it('starts blank and preserves self-authored instructions through language changes and restarts', () => {
     const home = mkdtempSync(join(tmpdir(), 'cc-seed-'));
     mkdirSync(join(home, DEPLOYMENT));
     const cfg = join(home, DEPLOYMENT, 'config.json');
     const constitution = join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md');
-    const shipped = (id: 'coo' | 'winter', language: 'zh' | 'ja' | 'zh-Hant') => readFileSync(personaFile(id, language), 'utf8');
+    const system = join(home, DEPLOYMENT, 'workspace', 'SYSTEM.md');
     writeFileSync(cfg, JSON.stringify({ language: 'ja' }));
     seed(home, 'zh');
-    expect(readFileSync(constitution, 'utf8')).toBe(shipped('coo', 'ja'));
-    applyPersona(join(home, DEPLOYMENT, 'workspace'), 'winter', 'ja');
+    expect(readFileSync(constitution, 'utf8')).toBe('');
+    expect(readFileSync(system, 'utf8')).toBe('');
+    writeFileSync(constitution, 'A self-description developed from experience.');
+    writeFileSync(system, 'Personal instructions written during reflection.');
     writeFileSync(cfg, JSON.stringify({ language: 'zh-Hant' }));
     seed(home, 'zh');
-    expect(readFileSync(constitution, 'utf8')).toBe(shipped('winter', 'zh-Hant'));
-    writeFileSync(cfg, JSON.stringify({ language: 'zh' }));
-    seed(home, 'zh');
-    const edited = `${shipped('winter', 'zh')}\n我喜欢猫。\n`;
-    writeFileSync(constitution, edited);
+    expect(readFileSync(constitution, 'utf8')).toBe('A self-description developed from experience.');
     writeFileSync(cfg, JSON.stringify({ language: 'en' }));
     seed(home, 'zh');
-    expect(readFileSync(constitution, 'utf8')).toBe(edited);
+    expect(readFileSync(constitution, 'utf8')).toBe('A self-description developed from experience.');
+    expect(readFileSync(system, 'utf8')).toBe('Personal instructions written during reflection.');
   });
 
   it('moves endpoints of the old deepseek module to coo and leaves other modules alone', () => {

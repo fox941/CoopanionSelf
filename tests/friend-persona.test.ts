@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Core } from 'cortico/core/core.ts';
+import { message } from 'cortico/protocol/open-responses/context.ts';
+import { setTimeout as delay } from 'node:timers/promises';
 import { nullLogger } from 'cortico/core/util.ts';
 import { loadDeployment } from 'cortico/deploy.ts';
 import cormini from '../vendor/cortico/bots/cormini/index.ts';
@@ -43,6 +45,19 @@ afterAll(() => {
 });
 
 describe('FriendPersona context', () => {
+  it('starts with empty self-owned prompt documents and exposes them on the existing prompt page', async () => {
+    const rig = setup();
+    expect(readFileSync(join(rig.persona.memoryDir, 'CONSTITUTION.md'), 'utf8')).toBe('');
+    expect(readFileSync(join(rig.persona.memoryDir, 'SYSTEM.md'), 'utf8')).toBe('');
+    const segments = await rig.persona.systemSegments({ now: new Date(), timezone: 'UTC', worlds: [] });
+    expect(segments.find(segment => segment.sourceKey === 'constitution')?.text.trim()).toBe('');
+    expect(segments.find(segment => segment.sourceKey === 'orientation')?.text.trim()).toBe('');
+    expect(rig.persona.webUi().promptDocs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'constitution', path: join(rig.persona.memoryDir, 'CONSTITUTION.md') }),
+      expect.objectContaining({ key: 'orientation', path: join(rig.persona.memoryDir, 'SYSTEM.md') }),
+    ]));
+  });
+
   it('leaves the original head intact when disabled, even if the preview is invalid', () => {
     vi.stubEnv('COOPANION_FRIEND_ENABLED', '0');
     const rig = setup();
@@ -130,6 +145,46 @@ describe('FriendPersona context', () => {
       expect(JSON.stringify(next)).not.toContain('Development preview: rested.');
       expect(JSON.stringify(core.session.records)).toBe(history);
       expect(history).not.toContain('Development preview:');
+    } finally {
+      await core.stop();
+    }
+  });
+
+  it('applies self-written prompts to a running Core at a safe boundary and keeps dialogue and workspace history', async () => {
+    const rig = setup();
+    mkdirSync(join(rig.dir, 'providers/fixture'), { recursive: true });
+    writeFileSync(join(rig.dir, 'providers/fixture/config.json'), JSON.stringify({ kind: 'openai-responses-compat', baseUrl: 'http://127.0.0.1:9/v1', spec: { model: 'test-model', thinking: false } }));
+    writeFileSync(join(rig.dir, 'config.json'), JSON.stringify({ activeProvider: 'fixture' }));
+    const loaded = loadDeployment(cormini, rig.dir, resolve(import.meta.dirname, '../vendor/cortico'));
+    let core: Core;
+    const persona = new FriendPersona({ memoryDir: rig.persona.memoryDir, friend: rig.source, refreshPrefix: () => core.loop.reloadSystemPrefix() });
+    core = new Core(loaded, { persona, worlds: [] });
+    try {
+      await core.start();
+      const tools = persona.declareSessions().find(session => session.persistent && session.receivesEvents)!.tools();
+      const context = { role: 'main', log: nullLogger() } as never;
+      const run = (name: string, args: Record<string, unknown>) => tools.find(tool => tool.name === name)!.handler(args, context);
+      const untilPrefix = async (text: string) => {
+        const deadline = Date.now() + 3000;
+        while (!JSON.stringify(core.session.records[0]?.item ?? null).includes(text)) {
+          if (Date.now() > deadline) throw new Error('Self-authored prefix did not refresh.');
+          await delay(10);
+        }
+      };
+      await untilPrefix('Your workspace contains CONSTITUTION.md');
+      core.session.append(message('user', 'A conversation to retain.'));
+      await run('write_file', { path: 'CONSTITUTION.md', content: 'A character-authored self-description.' });
+      await untilPrefix('A character-authored self-description.');
+      await run('write_file', { path: 'SYSTEM.md', content: 'Instructions developed through conversation.' });
+      await untilPrefix('Instructions developed through conversation.');
+      expect(JSON.stringify(core.session.records)).toContain('A conversation to retain.');
+      expect(String(await run('delete_file', { path: 'SYSTEM.md' }))).toContain('[delete failed]');
+      expect(String(await run('move_file', { from: 'SYSTEM.md', to: 'old-system.md' }))).toContain('[move failed]');
+      const restarted = new FriendPersona({ memoryDir: persona.memoryDir, friend: rig.source });
+      const prefix = JSON.stringify(await restarted.systemSegments({ now: new Date(), timezone: 'UTC', worlds: [] }));
+      expect(prefix).toContain('A character-authored self-description.');
+      expect(prefix).toContain('Instructions developed through conversation.');
+      if (persona.gitAvailable()) expect(persona.memory.git.status().repo).toBe(true);
     } finally {
       await core.stop();
     }

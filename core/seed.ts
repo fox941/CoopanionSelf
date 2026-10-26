@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRegion, endpointName, firstVendor, vendorEntry } from 'cortico-provider-coo/src/vendors.ts';
 import { LANGUAGES, type Language } from 'cortico/core/language.ts';
-import { appLanguage } from './language.ts';
 import { EARLIER_PERSONAS } from './seed-history.ts';
+import { ensureSelfPrompts } from './friend/self-prompts.ts';
 
 export const DEPLOYMENT = 'companion';
 export const CONSOLE_PORT = 17788;
@@ -33,9 +33,8 @@ export const personaFile = (id: PersonaId, language: Language) => join(SEED_DIR,
 /**
  * Writes the first-run files that are missing. A new deployment config gets `language` and an
  * endpoint without a key: the first model service listed for that language, on its platform for that
- * language (vendors.ts). Existing files are left as the operator made them, except a self-description
- * still exactly as a version seeded it, which becomes the same persona in the config's `language`
- * (`followLanguage`), endpoints of the old `deepseek` module, which now belong
+ * language (vendors.ts). Self-description and personal instructions start empty, and existing
+ * prompt files are preserved. Endpoints of the old `deepseek` module now belong
  * to `coo`, a config of computer use as its own World (`worlds.cua`), whose section, whether it was on
  * included, moves to `worlds.desktop-pet.cua`, a config without a computer-use `permission`, which
  * keeps the `ask-each-turn` it had before new installs got `ask-once`, and the keys Cortico 0.2.0 renamed
@@ -63,11 +62,9 @@ export function seed(home: string, language: Language): void {
       worlds: { 'desktop-pet': { cua: { permission: CUA_ASK } } },
     });
   }
-  const configured = appLanguage((JSON.parse(readFileSync(config, 'utf8')) as { language?: unknown }).language);
-  if (!existsSync(join(workspace, CONSTITUTION))) copyFileSync(personaFile('coo', configured), join(workspace, CONSTITUTION));
+  ensureSelfPrompts(workspace);
   // the console shows it as the bot's avatar
   if (!existsSync(join(deploy, 'avatar.png'))) copyFileSync(join(SEED_DIR, 'avatar.png'), join(deploy, 'avatar.png'));
-  followLanguage(workspace, configured);
   moveEndpointsToCoo(join(home, 'providers'));
   if (upgrading) {
     moveCuaIntoPet(config);

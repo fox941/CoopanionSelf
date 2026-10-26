@@ -33,7 +33,7 @@
 
 Coopanion 是一个桌宠。桌宠 **Coo** 待在屏幕底边，可以用气泡和你聊天、听你说话、在底边走动，经你同意后还能操作电脑。支持 Windows、macOS 和 Linux。
 
-本分支新增 [FriendPersona 开发状态接入](docs/friend-persona.md)，默认关闭，沿用已有角色和工作区。持久情绪与自主活动尚未实现。
+本分支采用[自行编写人设的 FriendPersona](docs/friend-persona.md)。新角色的自述与个人系统提示词初始为空，可通过工作区工具自行修改，保留版本并自动刷新前缀；系统提示词页面继续保留。应用运行说明与工具权限独立管理。可选开发状态预览默认关闭，后天形成的情绪状态与自主活动尚未实现。
 
 **语言**：应用和新手引导有简体中文、繁體中文、English、日本語、한국어、Français、Deutsch、Español (Latinoamérica)、Português (Brasil)、Italiano、Русский 11 种语言。新装时跟随系统语言，系统语言不在其中时用英文；在「习惯」页的「语言」里修改。Coo 用应用语言和你说话。
 

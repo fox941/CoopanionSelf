@@ -11,24 +11,20 @@
  * an update, and the settings the person changes.
  *
  * The app language (`config.language`, `language.ts`) picks the text people read and the language of
- * what Coo reads: the bundled Worlds' events, receipts and environment prompts, and the seeded persona
- * file, which is swapped for the other language's while it is still exactly as seeded. Each read takes
+ * what the bot reads: the bundled Worlds' events, receipts and environment prompts. Character-owned
+ * prompt files are not translated or replaced. Each read takes
  * the language as it is then; the prompt follows at the next prefix rebuild. A change, written on the
  * 「习惯」 page through the WebUI config API, goes out from `watchLanguage` the moment the live
- * config takes it: to the persona file, to Coopanion's config group titles, to the Electron main
+ * config takes it: to Coopanion's config group titles, to the Electron main
  * process (tray menu, settings window), to the pet's pages, and to the settings window's colour scheme names.
  *
  * The settings window's colours follow the pet's look (`console-theme.ts`): at start and whenever the
  * dressing page saves one.
  *
  * First start writes the files in `seed.ts`; after that every value is the operator's, edited in
- * the console. While the active endpoint has no key, event delivery starts paused. The first start
- * runs the introduction (`guide.ts`) in the pet's bubble, the key box included; after it, the pet
- * asks for a missing key in its bubble now and then, for as long as no key is set; with a key, a
- * run of failed model requests is told in the bubble with the upstream's reason. However the
- * introduction ends, the `coopanion` World hands Coo its record; walked through to the end, also
- * that the persona, the names and the rest are now its to settle with the person, and the prompt
- * page is where both of them edit it.
+ * the console. While the active endpoint has no key, event delivery starts paused. First start
+ * leaves the character prompts empty and does not play the scripted introduction. The menu's
+ * introduction entry opens settings. Model failures are reported with the upstream's reason.
  *
  * The parent (Electron main) gets `{ type: 'companion:ready', port, dataDir, keyMissing, language }` once the
  * console listens, `{ type: 'companion:language', language }` after the app language changes, `{ type: 'companion:open', path }` to show the settings window at a console
@@ -63,12 +59,12 @@ import { desktopPetDefinition, figurePacks, type DesktopPetWorld } from 'cortico
 import COO, { CHATGPT, CHATGPT_PROVIDER, signedIn, usageLimited, vendorOf } from 'cortico-provider-coo';
 import { appWebUiAsset, bundledWebUiAssets } from './bundled-panels.ts';
 import { followPetLook } from './console-theme.ts';
-import { askForKey, guideDone, markDone, runGuide, type GuideDeps } from './guide.ts';
+import { guideDone } from './guide.ts';
 import { NOTICE_ID, noticeDefinition, type NoticeWorld } from './notice.ts';
 import { coreText } from './i18n/index.ts';
 import { petToolDescriber } from './pet-status.ts';
 import { appLanguage, modelLanguage, replyLanguage } from './language.ts';
-import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, followLanguage as followPersonaLanguage, personaOf, seed } from './seed.ts';
+import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, personaOf, seed } from './seed.ts';
 import type { CoopanionPersona } from './persona.ts';
 import { friendPersona } from './friend-persona.ts';
 import { previewFriendContext } from './friend/context.ts';
@@ -90,29 +86,10 @@ function hasKey(config: CoreConfig): boolean {
 const APP_VERSION = process.env.COOPANION_VERSION ?? 'dev';
 /** The program directory; crash reports name files relative to it. */
 const APP_ROOT = fileURLToPath(new URL('../', import.meta.url));
-/** How long the pet page gets to show up on a first start before the settings window opens instead. */
-const PET_WAIT_MS = 60_000;
-/** Pet events that mean the person is talking to Coo. */
-const TALK_EVENTS = new Set(['desktop-pet.message', 'desktop-pet.speech']);
-/** After an introduction where the key was put off, the first ask waits this long (talking to Coo asks sooner). */
-const ASK_AFTER_GUIDE_MS = 20 * 60_000;
 /** Written in the deployment directory once the introduction has run. */
 const GUIDE_FILE = 'guide.json';
 /** The last version the `coopanion` World told Coo about, in the deployment directory. */
 const NOTICE_FILE = 'notice.json';
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Notes the person talking to Coo on the bus; the returned check reports it once and resets. */
-function watchTalk(bus: WakeBus): () => boolean {
-  let heard = false;
-  const push = bus.push.bind(bus);
-  bus.push = (item, opts) => {
-    if (item.event && TALK_EVENTS.has(item.event.type)) heard = true;
-    push(item, opts);
-  };
-  return () => { const was = heard; heard = false; return was; };
-}
 
 /** The switch for anonymous usage statistics, on the 「习惯」 page and in the advanced settings. */
 const TELEMETRY_KEY = 'companion.telemetry';
@@ -366,30 +343,6 @@ function reportedExtensions(extensions: ExtensionSet): Array<{ name: string; ver
   });
 }
 
-/**
- * The introduction on a first start, then the key asks while no key is set. An install that already
- * has a key (one from before the introduction existed) counts as introduced. When no pet page shows
- * up on a first start, the settings window opens at the home page instead, since nothing else would
- * tell the person why Coo stays silent.
- */
-async function introduce(deps: GuideDeps, run: (deps: GuideDeps) => Promise<void>, keySet: () => boolean, talked: (() => boolean) | null): Promise<void> {
-  const first = !guideDone(deps.doneFile);
-  if (first && keySet()) { markDone(deps.doneFile); return; }
-  if (first) {
-    const deadline = Date.now() + PET_WAIT_MS;
-    while (!deps.pet()?.petState().connected && Date.now() < deadline) await sleep(1000);
-    if (deps.pet()?.petState().connected) deps.track?.('pet_shown', { ms: Math.round(process.uptime() * 1000) });
-    else {
-      deps.track?.('pet_missing', {});
-      process.send?.({ type: 'companion:open', path: '#/home' });
-    }
-    await run(deps);
-  }
-  if (!talked) return;
-  // the introduction just asked for the key and the person put it off: the next ask waits
-  await askForKey(deps, keySet, talked, first ? ASK_AFTER_GUIDE_MS : 0);
-}
-
 /** Cormini's bot definition, its Persona class and its context config group, from the staged Cortico. */
 async function cormini() {
   const load = <T>(...path: string[]) => import(pathToFileURL(join(repoRoot(), 'bots', 'cormini', ...path)).href) as Promise<T>;
@@ -407,18 +360,11 @@ export async function main(): Promise<void> {
   let bus: WakeBus | null = null;
   /** Set once the bot exists. */
   let core: Core<CoreConfig> | null = null;
-  /** Set once the console listens. */
-  let guide: GuideDeps | null = null;
   /** Set once the deployment is loaded. */
   let telemetry: Telemetry | null = null;
   let config: CoreConfig | null = null;
   let notice: NoticeWorld | null = null;
-  /** The introduction is running: the settings it makes are not told as changes. */
-  let guiding = false;
-  const guideRun = async (deps: GuideDeps) => {
-    guiding = true;
-    try { await runGuide(deps); } finally { guiding = false; }
-  };
+  const guiding = false;
   /** The app language as the live config has it, Chinese before the config is loaded. */
   const language = () => appLanguage(config?.language);
   /** Figure pack directories besides the data directory's `figures/`, from the main process (the Steam Workshop's, app/steam.cjs). */
@@ -438,11 +384,7 @@ export async function main(): Promise<void> {
       openCuaSettings: () => process.send?.({ type: 'companion:open', path: '#/pet?cua=enable' }),
       quit: () => process.send?.({ type: 'companion:quit' }),
       quitLabel: () => coreText(language()).quit,
-      guide: () => {
-        if (!guide) return;
-        process.send?.({ type: 'companion:hide' });
-        void guideRun(guide);
-      },
+      guide: () => process.send?.({ type: 'companion:open', path: '' }),
     },
     modelLanguage: () => modelLanguage(config?.language),
     replyLanguage: () => replyLanguage(config?.language),
@@ -507,11 +449,11 @@ export async function main(): Promise<void> {
       const persona = new base.Persona({
         memoryDir: loaded.memoryDir,
         friend: previewFriendContext(loaded.rootDir),
+        refreshPrefix: () => core?.loop.reloadSystemPrefix() ?? Promise.resolve(),
         context: () => cfg.context,
         rounds: { ...cfg.rounds },
         worlds,
-        orientationOverrideFile: join(loaded.rootDir, 'prompts', 'ORIENTATION.md'),
-        firstTurnDir: join(loaded.rootDir, 'prompts'),
+        firstTurnDir: loaded.memoryDir,
         tickDelayMs: () => (cfg.tick.intervalMinutes === null ? null : cfg.tick.intervalMinutes * 60_000),
       });
       persona.snapshot(APP_VERSION);
@@ -546,7 +488,6 @@ export async function main(): Promise<void> {
   Object.assign(settingsGroup, companionGroup(language()));
   watchLanguage(loaded.config, (next) => {
     Object.assign(settingsGroup, companionGroup(next));
-    followPersonaLanguage(loaded.memoryDir, next);
     process.send?.({ type: 'companion:language', language: next });
     (pet as DesktopPetWorld | null)?.refresh();
     followPetLook(deployDir, getByPath(loaded.config as unknown as Record<string, unknown>, 'worlds.desktop-pet.skin') as { figure?: string; scheme?: string } | undefined,
@@ -594,22 +535,6 @@ export async function main(): Promise<void> {
   });
   stats.start();
   process.send?.({ type: 'companion:ready', port, dataDir: loaded.dataDir, keyMissing, language: language() });
-  const guideDeps: GuideDeps = {
-    pet: () => pet,
-    console: `http://127.0.0.1:${port}`,
-    doneFile: join(deployDir, GUIDE_FILE),
-    workspace: loaded.memoryDir,
-    whale: process.env.COOPANION_CHANNEL !== 'steam',
-    openDress: () => process.send?.({ type: 'companion:open', path: '#/dress' }),
-    onEnd: (end) => (notice as NoticeWorld | null)?.guideEnded(end),
-    track: (type, fields) => stats.event(type, fields),
-    language,
-    modelLanguage: () => modelLanguage(loaded.config.language),
-  };
-  guide = guideDeps;
-  void introduce(guideDeps, guideRun, () => hasKey(loaded.config), keyMissing ? watchTalk(bot.core.bus) : null).catch((err) => {
-    bot.core.runlog.logger('process').emit('error', '引导出错', { event: 'guide-error', err });
-  });
 
   let stopping = false;
   const shutdown = async (reason: string) => {
