@@ -347,12 +347,13 @@ function reportedExtensions(extensions: ExtensionSet): Array<{ name: string; ver
 /** Cormini's bot definition, its Persona class and its context config group, from the staged Cortico. */
 async function cormini() {
   const load = <T>(...path: string[]) => import(pathToFileURL(join(repoRoot(), 'bots', 'cormini', ...path)).href) as Promise<T>;
-  const [definition, persona, config] = await Promise.all([
+  const [definition, persona, config, history] = await Promise.all([
     load<{ default: BotDefinition<CorminiConfig> }>('index.ts'),
     load<{ Cormini: typeof Cormini }>('persona', 'persona.ts'),
     load<{ contextStageConfigGroup: typeof contextStageConfigGroup }>('persona', 'config.ts'),
+    load<typeof import('../vendor/cortico/bots/cormini/persona/workspaceGit.ts')>('persona', 'workspaceGit.ts'),
   ]);
-  return { definition: definition.default, Persona: friendPersona(persona.Cormini), contextGroup: config.contextStageConfigGroup('cormini') };
+  return { definition: definition.default, Persona: friendPersona(persona.Cormini), contextGroup: config.contextStageConfigGroup('cormini'), history: history.WorkspaceGit };
 }
 
 export async function main(): Promise<void> {
@@ -399,7 +400,6 @@ export async function main(): Promise<void> {
     onSkin: (skin) => followPetLook(join(deploymentRoot(), DEPLOYMENT), skin, (pet as DesktopPetWorld | null)?.packs() ?? [], language()),
   });
   const home = deploymentRoot();
-  const friendStorage = new FriendStorageRuntime(dirname(home));
   // the system's language, as the Electron main process read it; Chinese when the Core runs without it
   const system = process.env.COOPANION_SYSTEM_LANGUAGE;
   seed(home, isLanguage(system) ? system : 'zh');
@@ -420,6 +420,7 @@ export async function main(): Promise<void> {
   /** Coopanion's config group; the console reads this object, retitled in place when the app language changes. */
   const settingsGroup = companionGroup('zh');
   const base = await cormini();
+  const friendStorage = new FriendStorageRuntime(dirname(home), (directory, warn) => new base.history(directory, warn));
   /** Coo's Persona, once the bot is built. */
   let coo: CoopanionPersona | null = null;
   const definitionBase: BotDefinition<CorminiConfig> = {
@@ -451,6 +452,7 @@ export async function main(): Promise<void> {
       const persona = new base.Persona({
         memoryDir: loaded.memoryDir,
         friend: previewFriendContext(loaded.rootDir),
+        memoryService: () => friendStorage.memories(),
         refreshPrefix: () => core?.loop.reloadSystemPrefix() ?? Promise.resolve(),
         context: () => cfg.context,
         rounds: { ...cfg.rounds },
@@ -463,7 +465,7 @@ export async function main(): Promise<void> {
       return {
         persona,
         onStart: () => { friendStorage.start(); persona.startRhythm(); },
-        onStop: () => { try { persona.stopRhythm(); } finally { friendStorage.stop(); } },
+        onStop: async () => { try { persona.stopRhythm(); await friendStorage.flush(); } finally { friendStorage.stop(); } },
         webUi: {
           configGroups: [base.contextGroup, settingsGroup],
           status: () => ({ context: { maxTokens: cfg.context.maxTokens, softRatio: cfg.context.softRatio }, friendStorage: friendStorage.status() }),
@@ -524,7 +526,7 @@ export async function main(): Promise<void> {
   }
   // without a key every model call fails: hold events until the home page saves one and resumes
   const keyMissing = !hasKey(loaded.config);
-  if (keyMissing) bot.core.bus.setPaused(true);
+  if (keyMissing || process.env.CORTICO_START_PAUSED === '1') bot.core.bus.setPaused(true);
   const { port } = await bot.start().catch(async (err: unknown) => {
     friendStorage.stop();
     const tell = (msg: object) => new Promise<void>((done) => { if (!process.send?.(msg, () => done())) done(); });

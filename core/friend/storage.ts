@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { acquireInstanceLock, type InstanceLock } from 'cortico/core/instance-lock.ts';
 import { applyFriendMigrations } from './migrations.ts';
+import { MemoryIndex } from './memory-index.ts';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 export interface JsonObject { [key: string]: JsonValue }
@@ -203,6 +204,15 @@ export class StateCoordinator {
       id, source: row.source as FriendEventSource, key: row.event_key as string, scope: row.scope as MemoryScope,
       occurredAt: row.occurred_at as string, receivedAt: row.received_at as string, payload: JSON.parse(row.payload_json as string) as JsonObject,
     } : null;
+  }
+
+  memoryIndex(): MemoryIndex { return new MemoryIndex(this.db, () => this.now()); }
+
+  sources(scopes: readonly MemoryScope[], limit = 8): Array<SourceEvent & { id: string; receivedAt: string }> {
+    if (!scopes.length) return [];
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 32) throw new Error('Source limit must be between 1 and 32.');
+    return this.db.prepare(`SELECT id FROM source_events WHERE scope IN (${scopes.map(() => '?').join(',')}) ORDER BY received_at DESC, id DESC LIMIT ?`)
+      .all(...scopes, limit).map(row => this.readSource(row.id as string)!);
   }
 
   /** Source, state revision, audit record, consumer receipt and operations commit together. */

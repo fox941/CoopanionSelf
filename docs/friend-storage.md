@@ -26,12 +26,12 @@ These are storage APIs for the assembly and future Persona services. They do not
 
 Operations have stable IDs and states `pending`, `running`, `completed` and `uncertain`. Claiming pending work returns a new token; completion requires that token. A restarted store marks unfinished running work uncertain. It is not automatically repeated. The caller must establish the external result and either record it or explicitly allow a retry. State changes can enqueue work but do not execute it inside the transaction.
 
-The outbox currently supplies persistence and reconciliation primitives. Document projection workers, activity executors and platform sending are not connected.
+The outbox supplies persistence and reconciliation primitives for future activities and platform sending. [Managed memory](friend-memory.md) uses its own revision publication journal to recover Markdown writes; it does not claim or execute platform operations.
 
 ## Backups and inspection
 
 `backupTo(destination)` creates a new database-only snapshot using `VACUUM INTO`, includes committed WAL data and syncs the output file. It refuses an existing destination. A full character backup also needs the workspace, its Git history, Cortico event/session files, configuration and required extension data. Whole-runtime export/import tooling is still planned. During a manual migration stop both instances and copy the complete runtime into a separate destination before starting it.
 
-The existing `/api/status` response includes `friendStorage`: readiness, absolute database path, supported schema version, character UUID and current revision. It includes no state payload or credentials. The database is independent of the optional development context preview. It does not yet inject learned state, memories or reflections into model requests.
+The existing `/api/status` response includes `friendStorage`: readiness, absolute database path, supported schema version, character UUID and current revision. Its `memory` member reports managed entry, pending and stale counts, the document directory and Git availability. It includes no state payload, memory body or credentials. The database is independent of the optional development state preview. Managed memories enter requests through their own Persona hook; learned emotional state is not injected yet.
 
 `tests/friend-storage.test.ts` exercises real SQLite transactions, migration success and rollback, redelivery, stale revisions, writer exclusion, operation reconciliation, database snapshots, directory copying and a real Core lifecycle. Its profiles are isolated. The Vitest 2 module resolver loads the actual `node:sqlite` binding through a test-only shim because its built-in list predates that module.

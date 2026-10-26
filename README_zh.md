@@ -33,7 +33,7 @@
 
 Coopanion 是一个桌宠。桌宠 **Coo** 待在屏幕底边，可以用气泡和你聊天、听你说话、在底边走动，经你同意后还能操作电脑。支持 Windows、macOS 和 Linux。
 
-本分支采用[自行编写人设的 FriendPersona](docs/friend-persona.md)。新角色的自述与个人系统提示词初始为空，可通过工作区工具自行修改，保留版本并自动刷新前缀；系统提示词页面继续保留。应用运行说明与工具权限独立管理。[持久存储](docs/friend-storage.md)在 `<runtime>/friend/friend.sqlite` 保存初始空状态、稳定角色标识、来源记录和可恢复操作。可选开发状态预览默认关闭；后天形成的情绪、托管记忆检索与自主活动尚未实现。
+本分支采用[自行编写人设的 FriendPersona](docs/friend-persona.md)。新角色的自述与个人系统提示词初始为空，可通过工作区工具自行修改，保留版本并自动刷新前缀；系统提示词页面继续保留。应用运行说明与工具权限独立管理。[持久存储](docs/friend-storage.md)在 `<runtime>/friend/friend.sqlite` 保存初始空状态、稳定角色标识、来源记录和可恢复操作。[托管记忆](docs/friend-memory.md)已接入桌面对话，将带来源的 Markdown 修订保存在 `<runtime>/friend/memory`，提供 Git 历史、中文关键词回忆、纠错和按范围访问的工具。数据库原地升级到 schema 2；迁移时复制完整的已停止运行目录，以保留数据库和记忆正文。可选开发状态预览默认关闭；夜间整理、热温冷分层、后天形成的情绪与自主活动尚待实现。
 
 **语言**：应用和新手引导有简体中文、繁體中文、English、日本語、한국어、Français、Deutsch、Español (Latinoamérica)、Português (Brasil)、Italiano、Русский 11 种语言。新装时跟随系统语言，系统语言不在其中时用英文；在「习惯」页的「语言」里修改。Coo 用应用语言和你说话。
 
