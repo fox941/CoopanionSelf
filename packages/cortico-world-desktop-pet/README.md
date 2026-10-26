@@ -1,4 +1,4 @@
-<!-- Owner: src/definition.ts, src/cua/cua.ts, src/world.ts, src/asr/system-recognizer.ts, src/asr/transcription-api.ts -->
+<!-- Owner: src/definition.ts, src/cua/cua.ts, src/world.ts, src/asr/system-recognizer.ts, src/asr/transcription-api.ts, src/ENV_PROMPT.md, src/ENV_PROMPT.en.md -->
 
 <p align="center">
   <picture>
@@ -9,6 +9,8 @@
 
 [Cortico](https://github.com/Pal-AI-Lab/Cortico) 的桌宠 World,一个独立的扩展包。
 [Coopanion](https://github.com/Pal-AI-Lab/Coopanion) 桌面上的 Coo 就是它。
+
+环境提示词描述形象、显示机制和工具使用，不以形象的名称、表情或自动动作规定角色的人格、情绪与关系。回复篇幅由交流需要决定。
 
 bot 在屏幕底边有一个小身体,由一个形象包提供(见下文):内置的 Coo(C 形的身体,两只 0 形的眼睛,两条短腿)、内置的大肥鱼,或者装上的其他包。它用气泡说话、用选项提问、
 沿屏幕底边走动、做表情和动作;人可以对它说话(FunASR 或 Whisper 在本机识别,Windows 上也可用系统自带的识别)、打字、点选项、戳它、摸它、
