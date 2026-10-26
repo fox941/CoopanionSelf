@@ -69,7 +69,9 @@ import { coreText } from './i18n/index.ts';
 import { petToolDescriber } from './pet-status.ts';
 import { appLanguage, modelLanguage, replyLanguage } from './language.ts';
 import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, followLanguage as followPersonaLanguage, personaOf, seed } from './seed.ts';
-import { coopanionPersona, type CoopanionPersona } from './persona.ts';
+import type { CoopanionPersona } from './persona.ts';
+import { friendPersona } from './friend-persona.ts';
+import { previewFriendContext } from './friend/context.ts';
 import type { Cormini } from '../vendor/cortico/bots/cormini/persona/persona.ts';
 import type { contextStageConfigGroup } from '../vendor/cortico/bots/cormini/persona/config.ts';
 import type { CorminiConfig } from '../vendor/cortico/bots/cormini/index.ts';
@@ -396,7 +398,7 @@ async function cormini() {
     load<{ Cormini: typeof Cormini }>('persona', 'persona.ts'),
     load<{ contextStageConfigGroup: typeof contextStageConfigGroup }>('persona', 'config.ts'),
   ]);
-  return { definition: definition.default, Persona: coopanionPersona(persona.Cormini), contextGroup: config.contextStageConfigGroup('cormini') };
+  return { definition: definition.default, Persona: friendPersona(persona.Cormini), contextGroup: config.contextStageConfigGroup('cormini') };
 }
 
 export async function main(): Promise<void> {
@@ -504,6 +506,7 @@ export async function main(): Promise<void> {
       const cfg = loaded.config;
       const persona = new base.Persona({
         memoryDir: loaded.memoryDir,
+        friend: previewFriendContext(loaded.rootDir),
         context: () => cfg.context,
         rounds: { ...cfg.rounds },
         worlds,

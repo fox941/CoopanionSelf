@@ -33,6 +33,8 @@
 
 Coopanion is a desktop pet. **Coo** lives on the bottom edge of your screen: it chats with you in speech bubbles, listens when you talk, walks along the edge, and with your permission can use your computer. It runs on Windows, macOS and Linux.
 
+This fork adds a [FriendPersona development context interface](docs/friend-persona.md). It is disabled by default and preserves the existing character and workspace. Persistent emotions and autonomous activities are not implemented yet.
+
 **Languages**: the app and its first-run guide are in 简体中文, 繁體中文, English, 日本語, 한국어, Français, Deutsch, Español (Latinoamérica), Português (Brasil), Italiano and Русский. A new install uses the system language (English when the system language is none of these); change it under **Language** on the Habits page. Coo talks to you in the app language.
 
 ![1790222143546](image/README/1790222143546.png)
