@@ -8,6 +8,8 @@ export function fileUrlImports() {
     name: 'file-url-imports',
     enforce: 'pre' as const,
     resolveId(id: string) {
+      // Vite-node 2 strips node: from sqlite, which Node only exposes with that prefix.
+      if (id === 'sqlite' || id === 'node:sqlite') return fileURLToPath(new URL('./sqlite.ts', import.meta.url));
       if (id.startsWith('file:')) return fileURLToPath(id);
       if (!isAbsolute(id) || !/%[0-9a-f]{2}/i.test(id) || existsSync(id)) return;
       let decoded: string;

@@ -36,7 +36,7 @@
  * `{ type: 'companion:ports-busy', from, to }` when every console port Cortico tried could not be listened on.
  */
 import { readdirSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { BotDefinition } from 'cortico/bot.ts';
 import { createBot } from 'cortico/bot.ts';
@@ -68,6 +68,7 @@ import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, personaOf, seed } from './seed.
 import type { CoopanionPersona } from './persona.ts';
 import { friendPersona } from './friend-persona.ts';
 import { previewFriendContext } from './friend/context.ts';
+import { FriendStorageRuntime } from './friend/runtime.ts';
 import type { Cormini } from '../vendor/cortico/bots/cormini/persona/persona.ts';
 import type { contextStageConfigGroup } from '../vendor/cortico/bots/cormini/persona/config.ts';
 import type { CorminiConfig } from '../vendor/cortico/bots/cormini/index.ts';
@@ -398,6 +399,7 @@ export async function main(): Promise<void> {
     onSkin: (skin) => followPetLook(join(deploymentRoot(), DEPLOYMENT), skin, (pet as DesktopPetWorld | null)?.packs() ?? [], language()),
   });
   const home = deploymentRoot();
+  const friendStorage = new FriendStorageRuntime(dirname(home));
   // the system's language, as the Electron main process read it; Chinese when the Core runs without it
   const system = process.env.COOPANION_SYSTEM_LANGUAGE;
   seed(home, isLanguage(system) ? system : 'zh');
@@ -460,11 +462,11 @@ export async function main(): Promise<void> {
       coo = persona;
       return {
         persona,
-        onStart: () => persona.startRhythm(),
-        onStop: () => persona.stopRhythm(),
+        onStart: () => { friendStorage.start(); persona.startRhythm(); },
+        onStop: () => { try { persona.stopRhythm(); } finally { friendStorage.stop(); } },
         webUi: {
           configGroups: [base.contextGroup, settingsGroup],
-          status: () => ({ context: { maxTokens: cfg.context.maxTokens, softRatio: cfg.context.softRatio } }),
+          status: () => ({ context: { maxTokens: cfg.context.maxTokens, softRatio: cfg.context.softRatio }, friendStorage: friendStorage.status() }),
           configOptions: (kind) => (kind === LANGUAGE_OPTIONS ? LANGUAGES.map((value) => ({ value, label: LANGUAGE_NAMES[value] })) : []),
         },
       };
@@ -524,6 +526,7 @@ export async function main(): Promise<void> {
   const keyMissing = !hasKey(loaded.config);
   if (keyMissing) bot.core.bus.setPaused(true);
   const { port } = await bot.start().catch(async (err: unknown) => {
+    friendStorage.stop();
     const tell = (msg: object) => new Promise<void>((done) => { if (!process.send?.(msg, () => done())) done(); });
     // the app says why, rather than restarting this Core into the same wall: another process holds the data
     // directory, or the console found no port to listen on (Cortico throws the last candidate's listen error)

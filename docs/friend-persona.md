@@ -33,4 +33,4 @@ An absent file contributes no context. An invalid source is omitted for that req
 
 For the local development profile, the deployment is `D:\ai friend\runtime\dev\home\companion`. Its model credentials, character files and chat history are independent of this preview. Do not commit runtime files.
 
-This preview verifies the integration boundary. It does not implement a database, learned emotional state, relationships, memory retrieval, autonomous activities or reflection. The persistent state coordinator will supply `FriendContextSource` in a later change. Personality and emotional development will be grounded in conversation and experience; no emotional preset is initialized here.
+This preview verifies the context boundary. The app now opens [persistent companion storage](friend-storage.md) during startup; that store initially contains an empty state and stable character ID. It is independent of the preview and does not yet supply `FriendContextSource`. Learned emotional state, relationships, memory retrieval, autonomous activities and reflection remain to be implemented. No emotional preset is initialized.
